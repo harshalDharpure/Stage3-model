@@ -16,6 +16,13 @@ This folder contains **only** the 3-stage pipeline we discussed:
 - `ablation/`: Stage 2 ablation runner
 - `logs/`: optional logs
 
+## Recent code updates (May 2026)
+
+- **Stage 3 (`stage3_dpo/train.py`)**: Loads **PEFT adapter** checkpoints (Stage 2 `best/` folders), optional **`--load-in-4bit`** for VRAM; **`DPOConfig`** uses `max_prompt_length` only when your TRL version supports it (avoids `TypeError` on newer TRL).
+- **Stage 2**: Earlier updates include entailment caching / `entail_every`, loss scheduling, gradient clipping and diagnostics, lighter PEFT checkpoints, **`--resume`**. See `REPORT_3STAGE_PIPELINE.md`.
+- **Orchestration**: `run_full_pipeline.py` and `run_full_pipeline.sh` for end-to-end runs.
+- **Training outputs** (checkpoints, JSONL logs) stay under `q1_3stage_pipeline/logs/` and are **gitignored**; copy them with `rsync` when moving to another server.
+
 ## Quickstart
 
 Run from the **repo root** (so relative paths work):

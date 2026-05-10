@@ -48,9 +48,11 @@ def main() -> None:
     try:
         import torch
         from datasets import Dataset
+        from transformers import BitsAndBytesConfig
         from transformers import AutoModelForCausalLM, AutoTokenizer
         from trl import DPOConfig, DPOTrainer
         from sentence_transformers import SentenceTransformer
+        from peft import AutoPeftModelForCausalLM
     except ImportError as e:
         raise SystemExit(f"Install trl peft datasets: {e}") from e
 
@@ -59,6 +61,7 @@ def main() -> None:
     ap.add_argument("--train-jsonl", default="", help="Dialogue-level split JSONL (strict). If set, preferences are generated dynamically.")
     ap.add_argument("--preferences", default="", help="Optional: prebuilt preferences JSONL (not recommended for strict mode).")
     ap.add_argument("--output-dir", required=True)
+    ap.add_argument("--load-in-4bit", action="store_true", help="Load policy/ref in 4-bit (recommended if VRAM is limited).")
     ap.add_argument("--beta", type=float, default=0.1)
     ap.add_argument("--lr", type=float, default=5e-6)
     ap.add_argument("--epochs", type=float, default=1.0)
@@ -72,6 +75,58 @@ def main() -> None:
     set_global_seed(args.seed)
 
     m2_path = args.m2_path if os.path.isabs(args.m2_path) else str(_REPO / args.m2_path)
+
+    def _bnb_4bit_cfg() -> BitsAndBytesConfig:
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+
+    def _load_tok(path: str):
+        tok = AutoTokenizer.from_pretrained(path, use_fast=False)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        return tok
+
+    def _load_policy_and_ref(path: str):
+        """
+        Supports both:
+        - Full HF checkpoints (AutoModelForCausalLM)
+        - PEFT adapter checkpoints (AutoPeftModelForCausalLM)
+        """
+        is_adapter = os.path.isfile(os.path.join(path, "adapter_config.json"))
+        if is_adapter:
+            policy = AutoPeftModelForCausalLM.from_pretrained(
+                path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
+            ref = AutoPeftModelForCausalLM.from_pretrained(
+                path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
+        else:
+            policy = AutoModelForCausalLM.from_pretrained(
+                path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
+            ref = AutoModelForCausalLM.from_pretrained(
+                path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
+        ref.eval()
+        for p in ref.parameters():
+            p.requires_grad = False
+        return policy, ref
 
     if args.preferences and args.train_jsonl:
         raise SystemExit("Provide only one of --train-jsonl (strict dynamic) or --preferences.")
@@ -93,10 +148,23 @@ def main() -> None:
             p.requires_grad = False
 
         # We'll load policy model first (used for generation of model negative).
-        tok = AutoTokenizer.from_pretrained(m2_path, use_fast=False)
-        if tok.pad_token is None:
-            tok.pad_token = tok.eos_token
-        policy_for_gen = AutoModelForCausalLM.from_pretrained(m2_path, torch_dtype=torch.float16, device_map="auto")
+        tok = _load_tok(m2_path)
+        # Policy used only for negative generation; prefer 4-bit if enabled.
+        is_adapter = os.path.isfile(os.path.join(m2_path, "adapter_config.json"))
+        if is_adapter:
+            policy_for_gen = AutoPeftModelForCausalLM.from_pretrained(
+                m2_path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
+        else:
+            policy_for_gen = AutoModelForCausalLM.from_pretrained(
+                m2_path,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+            )
         gen_device = next(policy_for_gen.parameters()).device
 
         rng = random.Random(args.seed)
@@ -123,18 +191,13 @@ def main() -> None:
         torch.cuda.empty_cache()
         dataset = Dataset.from_dict({"prompt": prompts, "chosen": chosen, "rejected": rejected})
 
-    tok = AutoTokenizer.from_pretrained(m2_path, use_fast=False)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
+    tok = _load_tok(m2_path)
 
     # Policy init = M2; Reference = M2 frozen (strict spec).
-    model = AutoModelForCausalLM.from_pretrained(m2_path, torch_dtype=torch.float16, device_map="auto")
-    ref_model = AutoModelForCausalLM.from_pretrained(m2_path, torch_dtype=torch.float16, device_map="auto")
-    ref_model.eval()
-    for p in ref_model.parameters():
-        p.requires_grad = False
+    model, ref_model = _load_policy_and_ref(m2_path)
 
-    dpo_args = DPOConfig(
+    # TRL versions differ: some use max_prompt_length on DPOConfig, newer ones only max_length.
+    _dpo_kw = dict(
         output_dir=args.output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
@@ -142,12 +205,15 @@ def main() -> None:
         learning_rate=args.lr,
         beta=args.beta,
         max_length=args.max_length,
-        max_prompt_length=args.max_prompt_length,
         logging_steps=10,
         save_steps=200,
         fp16=torch.cuda.is_available(),
         seed=args.seed,
     )
+    try:
+        dpo_args = DPOConfig(**_dpo_kw, max_prompt_length=args.max_prompt_length)
+    except TypeError:
+        dpo_args = DPOConfig(**_dpo_kw)
 
     try:
         trainer = DPOTrainer(
