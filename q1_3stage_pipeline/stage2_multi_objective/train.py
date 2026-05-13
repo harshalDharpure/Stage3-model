@@ -160,13 +160,13 @@ def load_llama_qlora_model_only(base_name: str):
     return get_peft_model(model, lora)
 
 
-def load_init_from_exp3(exp3_rel: str):
+def load_init_from_exp3(exp3_rel: str, *, torch_dtype: torch.dtype = torch.float16):
     """Load merged Exp3 HF folder, then attach a new LoRA for Stage 2."""
     path = _REPO / exp3_rel
     if not path.is_dir():
         raise FileNotFoundError(f"exp3 checkpoint not found: {path}")
     print(f"Loading merged Exp3 weights from {path}")
-    m = AutoModelForCausalLM.from_pretrained(str(path), torch_dtype=torch.float16, device_map="auto")
+    m = AutoModelForCausalLM.from_pretrained(str(path), torch_dtype=torch_dtype, device_map="auto")
     lora = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=16,
@@ -279,6 +279,9 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # Match Stage 1 on Ampere+: bf16 weights + autocast; GradScaler must stay off for bf16.
+    amp_dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+
     if args.init_from == "m1":
         if not args.m1_path:
             raise SystemExit("--m1-path is required when --init-from m1")
@@ -299,7 +302,7 @@ def main() -> None:
                     device_map="auto",
                 )
             else:
-                base_model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=torch.float16, device_map="auto")
+                base_model = AutoModelForCausalLM.from_pretrained(base, torch_dtype=amp_dtype, device_map="auto")
             model = PeftModel.from_pretrained(base_model, m1)
         else:
             if args.load_in_4bit:
@@ -314,9 +317,9 @@ def main() -> None:
                     device_map="auto",
                 )
             else:
-                model = AutoModelForCausalLM.from_pretrained(m1, torch_dtype=torch.float16, device_map="auto")
+                model = AutoModelForCausalLM.from_pretrained(m1, torch_dtype=amp_dtype, device_map="auto")
     elif args.init_from == "exp3" and exp3_path:
-        model = load_init_from_exp3(exp3_path)
+        model = load_init_from_exp3(exp3_path, torch_dtype=amp_dtype)
     else:
         # Fallback: base model (QLoRA) if you want quick experiments.
         model = load_llama_qlora_model_only(base)
@@ -342,7 +345,7 @@ def main() -> None:
         [p for p in model.parameters() if p.requires_grad] + list(triplet_proj.parameters()) + list(entail_head.parameters()),
         lr=lr,
     )
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda" and amp_dtype != torch.bfloat16))
 
     max_len = int(train_cfg.get("max_length", 512))
     # LegalSFTDataset supports dialogue-level rows (with `turns`) and will flatten them
@@ -583,6 +586,9 @@ def main() -> None:
         )
         log_f.flush()
 
+    # Monotonic micro-batch counter across epochs (one row per dataloader batch in train_log.jsonl).
+    micro_batch_global = {"count": 0}
+
     def run_epoch(epoch: int, *, start_step_i: int = 0, start_opt_steps: int = 0) -> float:
         nonlocal best_val
         model.train()
@@ -600,11 +606,15 @@ def main() -> None:
         ma_skipped = deque(maxlen=50)  # 1 if skipped update, else 0
         # Rough total optimizer steps for scheduling (based on dataloader length).
         total_opt_steps = max(1, int(math.ceil((len(loader) * max(1, args.num_epochs)) / max(1, ga))))
-        for batch in tqdm(loader, desc=f"epoch {epoch}"):
+        pbar = tqdm(loader, desc=f"epoch {epoch}", dynamic_ncols=True)
+        for batch in pbar:
+            micro_batch_global["count"] += 1
+            progress_sched = float(opt_steps) / float(total_opt_steps)
+            w_sched_e, w_sched_t = _get_schedule_weights(progress_sched)
             row_indices = batch.pop("_row_indices")
             batch = {k: v.to(device) for k, v in batch.items()}
             labels = batch["labels"]
-            with torch.cuda.amp.autocast(enabled=(device.type == "cuda"), dtype=torch.float16):
+            with torch.cuda.amp.autocast(enabled=(device.type == "cuda"), dtype=amp_dtype):
                 out = model(
                     input_ids=batch["input_ids"],
                     attention_mask=batch["attention_mask"],
@@ -677,26 +687,35 @@ def main() -> None:
                 contrib_ent = 0.0
                 contrib_tri = 0.0
             elif args.ablation == "gen_entail":
-                progress = float(opt_steps) / float(total_opt_steps)
-                w_e, _w_t = _get_schedule_weights(progress)
                 contrib_gen = float(loss_gen.item())
-                contrib_ent = float((lam_e * w_e) * loss_e.item())
+                contrib_ent = float((lam_e * w_sched_e) * loss_e.item())
                 contrib_tri = 0.0
-                loss = loss_gen + (lam_e * w_e) * loss_e
+                loss = loss_gen + (lam_e * w_sched_e) * loss_e
             elif args.ablation == "gen_triplet":
-                progress = float(opt_steps) / float(total_opt_steps)
-                _w_e, w_t = _get_schedule_weights(progress)
                 contrib_gen = float(loss_gen.item())
                 contrib_ent = 0.0
-                contrib_tri = float((lam_t * w_t) * loss_tr.item())
-                loss = loss_gen + (lam_t * w_t) * loss_tr
+                contrib_tri = float((lam_t * w_sched_t) * loss_tr.item())
+                loss = loss_gen + (lam_t * w_sched_t) * loss_tr
             else:
-                progress = float(opt_steps) / float(total_opt_steps)
-                w_e, w_t = _get_schedule_weights(progress)
                 contrib_gen = float(loss_gen.item())
-                contrib_ent = float((lam_e * w_e) * loss_e.item())
-                contrib_tri = float((lam_t * w_t) * loss_tr.item())
-                loss = loss_gen + (lam_e * w_e) * loss_e + (lam_t * w_t) * loss_tr
+                contrib_ent = float((lam_e * w_sched_e) * loss_e.item())
+                contrib_tri = float((lam_t * w_sched_t) * loss_tr.item())
+                loss = loss_gen + (lam_e * w_sched_e) * loss_e + (lam_t * w_sched_t) * loss_tr
+
+            entail_loss_logged = (
+                float(loss_e.item())
+                if compute_entail and args.ablation in ("gen_entail", "full")
+                else None
+            )
+            schedule_lambda_entail = (lam_e * w_sched_e) if args.ablation in ("gen_entail", "full") else 0.0
+            schedule_lambda_triplet = (lam_t * w_sched_t) if args.ablation in ("gen_triplet", "full") else 0.0
+
+            # Live three-loss readout on the tqdm bar (raw L_gen / L_entail / L_tri for this micro-batch).
+            _ent_disp = f"{entail_loss_logged:.4f}" if entail_loss_logged is not None else "—"
+            pbar.set_postfix_str(
+                f"Lgen={float(loss_gen.item()):.4f} Lent={_ent_disp} Ltri={float(loss_tr.item()):.4f}",
+                refresh=True,
+            )
 
             loss = loss / ga
             if not torch.isfinite(loss):
@@ -825,9 +844,12 @@ def main() -> None:
             log_f.write(
                 json.dumps(
                     {
+                        "type": "train_micro_batch",
                         "epoch": epoch,
-                        "opt_step": int(opt_steps),
+                        "global_micro_batch": int(micro_batch_global["count"]),
                         "micro_step": int(step_i),
+                        "batches_per_epoch": int(len(loader)),
+                        "opt_step": int(opt_steps),
                         "grad_norm": float(grad_norm) if "grad_norm" in locals() else None,
                         "min_grad": float(gmin) if "gmin" in locals() else None,
                         "max_grad": float(gmax) if "gmax" in locals() else None,
@@ -837,6 +859,20 @@ def main() -> None:
                         "moving_avg_loss_entail": float(sum(ma_ent) / max(1, len(ma_ent))) if ma_ent else None,
                         "pct_triplet_near_margin_w50": float(100.0 * (sum(ma_triplet_sat) / max(1, len(ma_triplet_sat)))) if ma_triplet_sat else None,
                         "pct_entail_gt_0p8_w50": float(100.0 * (sum(ma_ent_high) / max(1, len(ma_ent_high)))) if ma_ent_high else None,
+                        # Raw objective terms (same micro-batch; entail null when skipped via entail_every or ablation).
+                        "generation_loss": float(loss_gen.item()),
+                        "entailment_loss": entail_loss_logged,
+                        "triplet_loss": float(loss_tr.item()),
+                        # Legacy aliases (loss_entail null when entail not computed this step).
+                        "loss_gen": float(loss_gen.item()),
+                        "loss_entail": entail_loss_logged,
+                        "loss_triplet": float(loss_tr.item()),
+                        # Weighted terms actually added into L before gradient_accumulation normalization (λ * schedule * L_*).
+                        "weighted_generation": float(contrib_gen) if "contrib_gen" in locals() else None,
+                        "weighted_entailment": float(contrib_ent) if "contrib_ent" in locals() else None,
+                        "weighted_triplet": float(contrib_tri) if "contrib_tri" in locals() else None,
+                        "schedule_lambda_entail": float(schedule_lambda_entail),
+                        "schedule_lambda_triplet": float(schedule_lambda_triplet),
                         "loss_contrib_gen": float(contrib_gen) if "contrib_gen" in locals() else None,
                         "loss_contrib_entail": float(contrib_ent) if "contrib_ent" in locals() else None,
                         "loss_contrib_triplet": float(contrib_tri) if "contrib_tri" in locals() else None,
@@ -849,9 +885,6 @@ def main() -> None:
                         "lr": float(opt.param_groups[0]["lr"]) if opt.param_groups else None,
                         "update_ratio": float(update_ratio) if "update_ratio" in locals() else None,
                         "loss": float(loss.item() * ga),
-                        "loss_gen": float(loss_gen.item()),
-                        "loss_entail": float(loss_e.item()),
-                        "loss_triplet": float(loss_tr.item()),
                     }
                 )
                 + "\n"

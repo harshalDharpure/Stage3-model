@@ -55,11 +55,14 @@ class JsonlLossLogger(TrainerCallback):
         if not logs:
             return
         row = {
+            "type": "train_step",
             "ts": datetime.now(timezone.utc).isoformat(),
             "global_step": int(state.global_step),
             "epoch": float(state.epoch) if state.epoch is not None else None,
             **{k: (float(v) if isinstance(v, (int, float)) else v) for k, v in logs.items()},
         }
+        if isinstance(row.get("loss"), (int, float)):
+            row["generation_loss"] = float(row["loss"])
         with open(self.jsonl_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -203,6 +206,11 @@ def main() -> None:
         report_to="none",
         seed=args.seed,
     )
+    # Full fine-tune loads weights in bfloat16; fp16=True enables the AMP GradScaler and can
+    # raise "_amp_foreach_non_finite_check_and_unscale_cuda not implemented for 'BFloat16'".
+    if args.full_finetune and torch.cuda.is_available():
+        ta_kwargs["fp16"] = False
+        ta_kwargs["bf16"] = torch.cuda.is_bf16_supported()
     if args.fsdp:
         # Minimal FSDP setup for LLaMA-style transformer blocks.
         # Use accelerate launcher + multiple GPUs.

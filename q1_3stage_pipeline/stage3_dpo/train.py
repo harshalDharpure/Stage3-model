@@ -53,6 +53,7 @@ def main() -> None:
         from trl import DPOConfig, DPOTrainer
         from sentence_transformers import SentenceTransformer
         from peft import AutoPeftModelForCausalLM
+        from tqdm.auto import tqdm
     except ImportError as e:
         raise SystemExit(f"Install trl peft datasets: {e}") from e
 
@@ -68,8 +69,10 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--grad-accum", type=int, default=8)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--max-length", type=int, default=2048)
-    ap.add_argument("--max-prompt-length", type=int, default=1536)
+    ap.add_argument("--max-length", type=int, default=1280)
+    ap.add_argument("--max-prompt-length", type=int, default=1024)
+    ap.add_argument("--no-grad-checkpoint", action="store_true", help="Disable gradient checkpointing (uses more VRAM).")
+    ap.add_argument("--preferences-cache", default="", help="Path to JSONL cache for mined preferences. Defaults to <output-dir>/preferences.jsonl.")
     args = ap.parse_args()
 
     set_global_seed(args.seed)
@@ -100,26 +103,26 @@ def main() -> None:
         if is_adapter:
             policy = AutoPeftModelForCausalLM.from_pretrained(
                 path,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
                 quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
             )
             ref = AutoPeftModelForCausalLM.from_pretrained(
                 path,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
                 quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
             )
         else:
             policy = AutoModelForCausalLM.from_pretrained(
                 path,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
                 quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
             )
             ref = AutoModelForCausalLM.from_pretrained(
                 path,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
                 device_map="auto",
                 quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
             )
@@ -137,64 +140,87 @@ def main() -> None:
         raw = load_prefs(args.preferences if os.path.isabs(args.preferences) else str(_REPO / args.preferences))
         dataset = Dataset.from_dict(raw)
     else:
-        split_path = args.train_jsonl if os.path.isabs(args.train_jsonl) else str(_REPO / args.train_jsonl)
-        rows = load_jsonl(split_path)
-        builder = DatasetBuilder(rows)
-        sft = builder.build_sft()
+        os.makedirs(args.output_dir, exist_ok=True)
+        cache_path = args.preferences_cache or os.path.join(args.output_dir, "preferences.jsonl")
+        if not os.path.isabs(cache_path):
+            cache_path = str(_REPO / cache_path)
 
-        # Frozen SBERT for filtering/hard mining.
-        sbert = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-        for p in sbert.parameters():
-            p.requires_grad = False
-
-        # We'll load policy model first (used for generation of model negative).
-        tok = _load_tok(m2_path)
-        # Policy used only for negative generation; prefer 4-bit if enabled.
-        is_adapter = os.path.isfile(os.path.join(m2_path, "adapter_config.json"))
-        if is_adapter:
-            policy_for_gen = AutoPeftModelForCausalLM.from_pretrained(
-                m2_path,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
-            )
+        if os.path.isfile(cache_path):
+            print(f"[stage3] Loading cached preferences from {cache_path}", flush=True)
+            raw = load_prefs(cache_path)
+            dataset = Dataset.from_dict(raw)
         else:
-            policy_for_gen = AutoModelForCausalLM.from_pretrained(
-                m2_path,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
-            )
-        gen_device = next(policy_for_gen.parameters()).device
+            split_path = args.train_jsonl if os.path.isabs(args.train_jsonl) else str(_REPO / args.train_jsonl)
+            rows = load_jsonl(split_path)
+            builder = DatasetBuilder(rows)
+            sft = builder.build_sft()
 
-        rng = random.Random(args.seed)
-        prompts, chosen, rejected = [], [], []
-        for ex in sft:
-            x = ex["prompt"]
-            y_pos = ex["output"]
-            # Dynamic rejected from 3 candidate sources.
-            cand1 = model_negative_generate(policy_for_gen, tok, x, gen_device, rng)
-            cand2 = corrupt_legal_text(y_pos)
-            cand3 = cross_sample_negative(sft, rng, avoid_dialogue_id=str(ex.get("dialogue_id", "")))
-            y_neg = select_hard_negative(
-                x=x,
-                y_pos=y_pos,
-                candidates=[cand1, cand2, cand3],
-                sentence_encoder=sbert,
-                sim_high_threshold=0.2,
-            )
-            prompts.append(x)
-            chosen.append(y_pos)
-            rejected.append(y_neg)
+            # Frozen SBERT for filtering/hard mining.
+            sbert = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+            for p in sbert.parameters():
+                p.requires_grad = False
 
-        del policy_for_gen
-        torch.cuda.empty_cache()
-        dataset = Dataset.from_dict({"prompt": prompts, "chosen": chosen, "rejected": rejected})
+            # We'll load policy model first (used for generation of model negative).
+            tok = _load_tok(m2_path)
+            # Policy used only for negative generation; prefer 4-bit if enabled.
+            is_adapter = os.path.isfile(os.path.join(m2_path, "adapter_config.json"))
+            if is_adapter:
+                policy_for_gen = AutoPeftModelForCausalLM.from_pretrained(
+                    m2_path,
+                    torch_dtype=torch.bfloat16,
+                    device_map="auto",
+                    quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+                )
+            else:
+                policy_for_gen = AutoModelForCausalLM.from_pretrained(
+                    m2_path,
+                    torch_dtype=torch.bfloat16,
+                    device_map="auto",
+                    quantization_config=_bnb_4bit_cfg() if args.load_in_4bit else None,
+                )
+            gen_device = next(policy_for_gen.parameters()).device
+
+            rng = random.Random(args.seed)
+            prompts, chosen, rejected = [], [], []
+            tmp_path = cache_path + ".tmp"
+            print(f"[stage3] Mining preferences over {len(sft)} examples -> {cache_path}", flush=True)
+            with open(tmp_path, "w", encoding="utf-8") as fout:
+                for i, ex in enumerate(tqdm(sft, desc="mining preferences", file=sys.stdout, dynamic_ncols=True), start=1):
+                    x = ex["prompt"]
+                    y_pos = ex["output"]
+                    cand1 = model_negative_generate(policy_for_gen, tok, x, gen_device, rng)
+                    cand2 = corrupt_legal_text(y_pos)
+                    cand3 = cross_sample_negative(sft, rng, avoid_dialogue_id=str(ex.get("dialogue_id", "")))
+                    y_neg = select_hard_negative(
+                        x=x,
+                        y_pos=y_pos,
+                        candidates=[cand1, cand2, cand3],
+                        sentence_encoder=sbert,
+                        sim_high_threshold=0.2,
+                    )
+                    prompts.append(x)
+                    chosen.append(y_pos)
+                    rejected.append(y_neg)
+                    fout.write(json.dumps({"prompt": x, "chosen": y_pos, "rejected": y_neg}, ensure_ascii=False) + "\n")
+                    if i % 50 == 0:
+                        fout.flush()
+            os.replace(tmp_path, cache_path)
+            print(f"[stage3] Saved preferences cache: {cache_path}", flush=True)
+
+            del policy_for_gen
+            torch.cuda.empty_cache()
+            dataset = Dataset.from_dict({"prompt": prompts, "chosen": chosen, "rejected": rejected})
 
     tok = _load_tok(m2_path)
 
     # Policy init = M2; Reference = M2 frozen (strict spec).
     model, ref_model = _load_policy_and_ref(m2_path)
+    if not args.no_grad_checkpoint:
+        model.config.use_cache = False
+        try:
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        except TypeError:
+            model.gradient_checkpointing_enable()
 
     # TRL versions differ: some use max_prompt_length on DPOConfig, newer ones only max_length.
     _dpo_kw = dict(
@@ -207,7 +233,9 @@ def main() -> None:
         max_length=args.max_length,
         logging_steps=10,
         save_steps=200,
-        fp16=torch.cuda.is_available(),
+        bf16=torch.cuda.is_available(),
+        gradient_checkpointing=(not args.no_grad_checkpoint),
+        optim="paged_adamw_8bit",
         seed=args.seed,
     )
     try:
