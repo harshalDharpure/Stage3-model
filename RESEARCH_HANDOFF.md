@@ -166,4 +166,34 @@ Ensure **`final_train_dialogues.jsonl`** exists at the path in the YAML (`final_
 
 ---
 
+## 10. **Test-set evaluation** (Stage 1 & 2) on another machine
+
+**What is on GitHub:** evaluation **code** only — `q1_3stage_pipeline/evaluation/checkpoint_test_eval.py`, `run_stage1_stage2_test_eval.sh`, `stage2_test_eval.py` (shim), and `metrics.py`. You can `git clone` / `git pull` on the new server and run the same commands.
+
+**What is not in Git (must copy or have locally):**
+
+- **M1 weights:** `q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora/final/` (full HF tree including `*.safetensors`).
+- **M2 weights:** `q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/final/`.
+- **Test dialogues:** `q1_3stage_pipeline/data/test_20_dialogues.jsonl` (tracked in Git if present in repo; if missing, copy from your machine).
+
+**Run both evaluations (from repo root, after `python -m venv .venv` + install deps):**
+
+```bash
+./q1_3stage_pipeline/evaluation/run_stage1_stage2_test_eval.sh
+```
+
+Or run `checkpoint_test_eval.py` once per stage with `--eval-name`, `--model-path`, and output paths under `q1_3stage_pipeline/logs/evaluation/` (see script docstring).
+
+**Saving metrics to Git:** after a full run, add and push the generated files, for example:
+
+```bash
+git add q1_3stage_pipeline/logs/evaluation/*.json q1_3stage_pipeline/logs/evaluation/*.md q1_3stage_pipeline/logs/evaluation/*.jsonl
+git commit -m "Test eval results (M1/M2 on test split)"
+git push origin main && git push stage3 main
+```
+
+Keep total size reasonable (GitHub warns above ~100 MB per file). Prediction JSONLs for ~950 pairs are typically a few MB.
+
+---
+
 *This document describes the state of the research line using **seed 43** and the checkpoint paths above. If you start a new seed or run name, update paths and this file accordingly.*

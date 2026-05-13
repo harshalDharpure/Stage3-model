@@ -13,6 +13,3 @@ q1_3stage_pipeline/logs/**/*.safetensors
 q1_3stage_pipeline/logs/**/optimizer.pt
 q1_3stage_pipeline/logs/**/latest.pt
 
-# Local test-eval outputs (regenerate with evaluation/checkpoint_test_eval.py)
-q1_3stage_pipeline/logs/evaluation/
-
