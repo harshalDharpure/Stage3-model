@@ -56,6 +56,11 @@ def main() -> None:
 
     # Resume flags
     ap.add_argument("--resume-stage2", action="store_true", help="Resume Stage 2 from output_dir/checkpoints/latest.pt.")
+    ap.add_argument(
+        "--resume-stage3",
+        action="store_true",
+        help="Resume Stage 3 DPO from the latest HF checkpoint under the stage3 output dir (e.g. checkpoint-200).",
+    )
 
     # Stage 2 runtime knobs (safe defaults)
     ap.add_argument("--stage2-entail-max-new-tokens", type=int, default=32)
@@ -202,32 +207,32 @@ def main() -> None:
 
     # ---------------- Stage 3 ----------------
     if not args.skip_stage3:
-        sh(
-            [
-                sys.executable,
-                "-u",
-                str(PIPE / "stage3_dpo" / "train.py"),
-                "--m2-path",
-                str(m2_final),
-                "--train-jsonl",
-                str(final_train_path),
-                "--output-dir",
-                str(m3_dir),
-                "--beta",
-                str(args.stage3_beta),
-                "--lr",
-                str(args.stage3_lr),
-                "--epochs",
-                str(args.stage3_epochs),
-                "--batch-size",
-                str(args.stage3_batch_size),
-                "--grad-accum",
-                str(args.stage3_grad_accum),
-                "--seed",
-                str(args.seed),
-            ],
-            env=env,
-        )
+        stage3_cmd = [
+            sys.executable,
+            "-u",
+            str(PIPE / "stage3_dpo" / "train.py"),
+            "--m2-path",
+            str(m2_final),
+            "--train-jsonl",
+            str(final_train_path),
+            "--output-dir",
+            str(m3_dir),
+            "--beta",
+            str(args.stage3_beta),
+            "--lr",
+            str(args.stage3_lr),
+            "--epochs",
+            str(args.stage3_epochs),
+            "--batch-size",
+            str(args.stage3_batch_size),
+            "--grad-accum",
+            str(args.stage3_grad_accum),
+            "--seed",
+            str(args.seed),
+        ]
+        if args.resume_stage3:
+            stage3_cmd.append("--resume")
+        sh(stage3_cmd, env=env)
 
     # Write a tiny run manifest.
     manifest = {

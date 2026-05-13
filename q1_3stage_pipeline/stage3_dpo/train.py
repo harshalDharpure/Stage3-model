@@ -73,11 +73,23 @@ def main() -> None:
     ap.add_argument("--max-prompt-length", type=int, default=1024)
     ap.add_argument("--no-grad-checkpoint", action="store_true", help="Disable gradient checkpointing (uses more VRAM).")
     ap.add_argument("--preferences-cache", default="", help="Path to JSONL cache for mined preferences. Defaults to <output-dir>/preferences.jsonl.")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume DPO from the latest Hugging Face checkpoint under --output-dir (e.g. checkpoint-200). "
+        "Use the same hyperparameters and --load-in-4bit setting as the original run.",
+    )
+    ap.add_argument(
+        "--resume-from-checkpoint",
+        default="",
+        help="Resume from this checkpoint directory (e.g. .../checkpoint-200). Overrides --resume last-checkpoint search.",
+    )
     args = ap.parse_args()
 
     set_global_seed(args.seed)
 
     m2_path = args.m2_path if os.path.isabs(args.m2_path) else str(_REPO / args.m2_path)
+    out_dir = args.output_dir if os.path.isabs(args.output_dir) else str(_REPO / args.output_dir)
 
     def _bnb_4bit_cfg() -> BitsAndBytesConfig:
         return BitsAndBytesConfig(
@@ -140,8 +152,8 @@ def main() -> None:
         raw = load_prefs(args.preferences if os.path.isabs(args.preferences) else str(_REPO / args.preferences))
         dataset = Dataset.from_dict(raw)
     else:
-        os.makedirs(args.output_dir, exist_ok=True)
-        cache_path = args.preferences_cache or os.path.join(args.output_dir, "preferences.jsonl")
+        os.makedirs(out_dir, exist_ok=True)
+        cache_path = args.preferences_cache or os.path.join(out_dir, "preferences.jsonl")
         if not os.path.isabs(cache_path):
             cache_path = str(_REPO / cache_path)
 
@@ -222,9 +234,24 @@ def main() -> None:
         except TypeError:
             model.gradient_checkpointing_enable()
 
+    os.makedirs(out_dir, exist_ok=True)
+
+    resume_ckpt: str | None = None
+    if args.resume_from_checkpoint:
+        r = args.resume_from_checkpoint
+        resume_ckpt = r if os.path.isabs(r) else str(_REPO / r)
+        if not os.path.isdir(resume_ckpt):
+            raise SystemExit(f"--resume-from-checkpoint is not a directory: {resume_ckpt}")
+    elif args.resume:
+        from transformers.trainer_utils import get_last_checkpoint
+
+        resume_ckpt = get_last_checkpoint(out_dir)
+        if not resume_ckpt:
+            raise SystemExit(f"--resume set but no checkpoint found under {out_dir}")
+
     # TRL versions differ: some use max_prompt_length on DPOConfig, newer ones only max_length.
     _dpo_kw = dict(
-        output_dir=args.output_dir,
+        output_dir=out_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
@@ -237,6 +264,7 @@ def main() -> None:
         gradient_checkpointing=(not args.no_grad_checkpoint),
         optim="paged_adamw_8bit",
         seed=args.seed,
+        overwrite_output_dir=False,
     )
     try:
         dpo_args = DPOConfig(**_dpo_kw, max_prompt_length=args.max_prompt_length)
@@ -260,10 +288,13 @@ def main() -> None:
             tokenizer=tok,
         )
 
-    trainer.train()
-    trainer.save_model(os.path.join(args.output_dir, "final"))
-    tok.save_pretrained(os.path.join(args.output_dir, "final"))
-    print("Saved", os.path.join(args.output_dir, "final"))
+    if resume_ckpt:
+        print(f"[stage3] Resuming from checkpoint: {resume_ckpt}", flush=True)
+
+    trainer.train(resume_from_checkpoint=resume_ckpt)
+    trainer.save_model(os.path.join(out_dir, "final"))
+    tok.save_pretrained(os.path.join(out_dir, "final"))
+    print("Saved", os.path.join(out_dir, "final"))
 
 
 if __name__ == "__main__":
