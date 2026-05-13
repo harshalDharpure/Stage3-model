@@ -1,0 +1,169 @@
+# Research handoff: completed work, remaining work, and server resume
+
+Give this file to anyone bringing the project up on a **new machine**. It records what finished, what did not, what to copy, and the exact commands to continue without redoing Stages 1–2.
+
+---
+
+## 1. Project shape (three stages)
+
+| Stage | Role | Primary script |
+|-------|------|------------------|
+| **1** | Supervised fine-tuning (SFT) on dialogue data | `q1_3stage_pipeline/stage1_sft/train.py` |
+| **2** | Multi-objective training (generation + entailment + triplet) on top of M1 | `q1_3stage_pipeline/stage2_multi_objective/train.py` |
+| **3** | DPO alignment on top of M2 (TRL `DPOTrainer`) | `q1_3stage_pipeline/stage3_dpo/train.py` |
+
+End-to-end orchestration (optional): `q1_3stage_pipeline/run_full_pipeline.py`  
+Default path config: `q1_3stage_pipeline/configs/pipeline_default.yaml`
+
+---
+
+## 2. What is **completed** (as of this handoff)
+
+### Stage 1 — **done**
+
+- **Run name:** `M1_seed43_qlora` (seed **43** in this experiment line).
+- **Evidence:** `q1_3stage_pipeline/logs/stage1_metrics/M1_seed43_qlora/summary.json` reports finished training through **epoch 3.0**, `train_loss`, `val_perplexity`, `train_runtime`.
+- **Exported weights:** `q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora/final/` (and intermediate checkpoints under the same parent).
+
+### Stage 2 — **done** (M2 produced for downstream use)
+
+- **Run directory:** `q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/`
+- **Evidence:** `best/` and `final/` HF-style trees exist; `train_log.jsonl` covers the full training window for this run; `run_args.json` records hyperparameters and paths.
+- **Stage 3 consumes:** `.../M2_fromM1_seed43_full_finaltrain/final/` as `--m2-path`.
+
+### Repository and automation
+
+- Code and **non-weight** run artifacts (metrics, configs, text logs, tokenizer JSON, etc.) are versioned under `q1_3stage_pipeline/logs/` per `.gitignore` rules (large `*.safetensors`, `optimizer.pt`, `latest.pt` remain local only unless you add other storage).
+- Stage 3 **resume from checkpoint** is implemented: `--resume`, `--resume-from-checkpoint`, and pipeline flag `--resume-stage3` (see section 5).
+
+---
+
+## 3. What is **left** (not finished)
+
+### Stage 3 (DPO) — **incomplete**
+
+- **Output directory:** `q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/`
+- **Checkpoint on disk:** `checkpoint-200/` (Hugging Face trainer checkpoint).
+- **Trainer schedule (from `checkpoint-200/trainer_state.json`):** `max_steps` = **466** for `num_train_epochs` = **1**, but training reached **global_step** = **200** only (~**43%** of one epoch in step terms).
+- **No** `final/` export under Stage 3 yet (that is written when training runs to completion and `save_model` runs at the end of the script).
+- **Past failures:** some pipeline logs show **`CUDA out of memory`** during Stage 3 on an ~80 GiB GPU with prior settings; the new server may need more headroom or different memory settings (see section 6).
+
+**Goal on the new server:** resume Stage 3 from `checkpoint-200` until training finishes, then verify `.../stage3/.../final/` exists.
+
+---
+
+## 4. What to **copy** to the new server (cannot rely on Git alone)
+
+### Must have for resume
+
+1. **Repo:** `git clone` from GitHub, then `git pull` on branch `main` (same code as handoff with resume flags).
+2. **Data (including gitignored files):**
+   - `q1_3stage_pipeline/data/train_70_dialogues.jsonl`
+   - `q1_3stage_pipeline/data/val_10_dialogues.jsonl`
+   - `q1_3stage_pipeline/data/test_20_dialogues.jsonl` (for held-out evaluation later, if used)
+   - **`q1_3stage_pipeline/data/final_train_dialogues.jsonl`** — required for Stage 3 strict path; often **not** in Git due to `.gitignore`
+3. **Stage 1 `final/`** — only if you plan to re-run Stage 2; not required if you only resume Stage 3.
+4. **Stage 2 `final/` (M2)** — **required** for Stage 3: entire folder  
+   `q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/final/`  
+   including all **`.safetensors`** shards and index, configs, tokenizer files.
+5. **Stage 3 partial run directory:**  
+   `q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/`  
+   at minimum: **`checkpoint-200/`** (full tree), **`preferences.jsonl`**, and any small side files you already had there.
+
+### Optional
+
+- `q1_3stage_pipeline/logs/pipeline_runs/*.log` for debugging history.
+- `splits_dialogue_level/` and root `README.md` / `report.md` for documentation context.
+
+### Do **not** copy
+
+- **`.venv/`** — recreate the environment on the new machine (see section 6).
+
+### Practical copy command (example)
+
+From the old host (adjust user, host, and paths):
+
+```bash
+rsync -avz --progress /path/to/Legal_posco-3stages/q1_3stage_pipeline/data/ user@NEW:/path/to/Legal_posco-3stages/q1_3stage_pipeline/data/
+rsync -avz --progress /path/to/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/final/ user@NEW:/path/to/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/final/
+rsync -avz --progress /path/to/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/ user@NEW:/path/to/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/
+```
+
+---
+
+## 5. **Resume** Stage 3 only (new server)
+
+Run from the **repository root** (`Legal_posco-3stages/`). Use the **same** hyperparameters as the original Stage 3 run unless you intentionally start a new experiment.
+
+### Canonical resume command
+
+```bash
+python3 -u q1_3stage_pipeline/stage3_dpo/train.py \
+  --m2-path q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain/final \
+  --train-jsonl q1_3stage_pipeline/data/final_train_dialogues.jsonl \
+  --output-dir q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1 \
+  --beta 0.1 \
+  --lr 5e-6 \
+  --epochs 1.0 \
+  --batch-size 1 \
+  --grad-accum 8 \
+  --seed 43 \
+  --resume
+```
+
+- **`--resume`** picks up the **latest** checkpoint under `--output-dir` (here, `checkpoint-200` if nothing newer exists).
+- To pin a folder explicitly: add **`--resume-from-checkpoint q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/checkpoint-200`** instead of `--resume`.
+
+### Via pipeline (skip Stages 1–2, resume Stage 3)
+
+```bash
+python3 -u q1_3stage_pipeline/run_full_pipeline.py \
+  --config q1_3stage_pipeline/configs/pipeline_default.yaml \
+  --skip-stage1 \
+  --skip-stage2 \
+  --resume-stage3
+```
+
+Ensure **`final_train_dialogues.jsonl`** exists at the path in the YAML (`final_train_path`) before running.
+
+---
+
+## 6. Environment and stability notes
+
+1. **Python / CUDA:** Install PyTorch with CUDA matching the new GPU; reinstall `trl`, `peft`, `transformers`, `accelerate`, `bitsandbytes` (Stage 3 default uses **`paged_adamw_8bit`** in `DPOConfig`).
+2. **Hugging Face:** If the base model is gated, set **`HF_TOKEN`** (or `huggingface-cli login`) on the new machine.
+3. **Match training mode when resuming:** use the same **`--load-in-4bit`** (on/off) as the run that produced `checkpoint-200`. Mixing quantization settings with an existing checkpoint can fail to load.
+4. **VRAM:** If OOM persists, try gradient checkpointing (on by default unless **`--no-grad-checkpoint`**), larger **`--grad-accum`**, or a GPU with more memory — after resume, the trainer continues optimizer state from disk; do not change batch semantics lightly without understanding checkpoint compatibility.
+
+---
+
+## 7. How to **verify** completion after Stage 3
+
+- Directory exists:  
+  `q1_3stage_pipeline/logs/checkpoints/stage3/M3_fromM2_seed43_beta0.1/final/`
+- `trainer_state.json` in the last checkpoint shows **`global_step`** reached the scheduled **`max_steps`** (or training ended by epoch as configured).
+- Script prints **`Saved .../final`** at the end of `stage3_dpo/train.py`.
+
+---
+
+## 8. Quick reference table (completed vs left)
+
+| Item | Status |
+|------|--------|
+| Stage 1 (`M1_seed43_qlora`) | **Complete** |
+| Stage 2 (`M2_fromM1_seed43_full_finaltrain` → `final/`) | **Complete** |
+| Stage 3 DPO (`M3_fromM2_seed43_beta0.1`) | **Incomplete** — resume from `checkpoint-200` |
+| Stage 3 `final/` export | **Missing** until training finishes |
+| Full pipeline log “all stages green” | **Not guaranteed** until Stage 3 completes on a machine without OOM |
+
+---
+
+## 9. Repositories (code)
+
+- **Primary:** `https://github.com/harshalDharpure/Legal_posco-3stages`
+- **Mirror / experiment hub:** `https://github.com/harshalDharpure/Stage3-model`  
+  Keep **`main`** in sync via `git pull` / `git push` depending on which repo you treat as source of truth.
+
+---
+
+*This document describes the state of the research line using **seed 43** and the checkpoint paths above. If you start a new seed or run name, update paths and this file accordingly.*
