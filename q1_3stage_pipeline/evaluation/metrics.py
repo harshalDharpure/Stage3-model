@@ -80,7 +80,13 @@ def calculate_all_metrics(reference: str, candidate: str) -> Dict[str, float]:
     return metrics
 
 
-def calculate_batch_metrics(references: List[str], candidates: List[str], lang: str = "en") -> Dict[str, float]:
+def calculate_batch_metrics(
+    references: List[str],
+    candidates: List[str],
+    lang: str = "en",
+    *,
+    include_bertscore: bool = True,
+) -> Dict[str, float]:
     all_metrics = {
         "bleu_1": [],
         "bleu_2": [],
@@ -96,7 +102,10 @@ def calculate_batch_metrics(references: List[str], candidates: List[str], lang: 
         for k in all_metrics:
             all_metrics[k].append(m[k])
     avg_metrics = {k: (sum(v) / len(v) if v else 0.0) for k, v in all_metrics.items()}
-    avg_metrics.update(calculate_bertscore(references, candidates, lang=lang))
+    if include_bertscore:
+        avg_metrics.update(calculate_bertscore(references, candidates, lang=lang))
+    else:
+        avg_metrics["bertscore_f1"] = 0.0
     return avg_metrics
 
 
