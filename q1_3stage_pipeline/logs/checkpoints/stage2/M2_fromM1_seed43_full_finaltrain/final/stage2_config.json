@@ -1,0 +1,9 @@
+{
+  "init_from": "m1",
+  "m1_path": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora/final",
+  "ablation": "full",
+  "lambda_entail": 0.5,
+  "lambda_triplet": 0.5,
+  "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+  "nli_teacher": "microsoft/deberta-large-mnli"
+}

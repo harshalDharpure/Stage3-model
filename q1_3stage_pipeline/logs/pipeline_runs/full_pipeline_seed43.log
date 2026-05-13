@@ -1,0 +1,125 @@
+
+$ /home/jovyan/posco-research/Legal_posco-3stages/.venv/bin/python3 -u /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py --config /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/configs/pipeline_default.yaml --train-jsonl /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl --val-jsonl /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl --output-dir /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora --seed 43
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_http.py", line 402, in hf_raise_for_status
+    response.raise_for_status()
+  File "/usr/local/lib/python3.12/dist-packages/requests/models.py", line 1024, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct/resolve/main/config.json
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/transformers/utils/hub.py", line 479, in cached_files
+    hf_hub_download(
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 1007, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 1114, in _hf_hub_download_to_cache_dir
+    _raise_on_head_call_error(head_call_error, force_download, local_files_only)
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 1655, in _raise_on_head_call_error
+    raise head_call_error
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 1543, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 1460, in get_hf_file_metadata
+    r = _request_wrapper(
+        ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 283, in _request_wrapper
+    response = _request_wrapper(
+               ^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py", line 307, in _request_wrapper
+    hf_raise_for_status(response)
+  File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_http.py", line 419, in hf_raise_for_status
+    raise _format(GatedRepoError, message, response) from e
+huggingface_hub.errors.GatedRepoError: 401 Client Error. (Request ID: Root=1-6a002568-2c2f67f95811be583a3bffc5;bf66ee44-72bd-498e-aba0-a0255d4a65d1)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct/resolve/main/config.json.
+Access to model meta-llama/Llama-3.1-8B-Instruct is restricted. You must have access to it and be authenticated to access it. Please log in.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py", line 268, in <module>
+    main()
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py", line 109, in main
+    tokenizer = AutoTokenizer.from_pretrained(base, use_fast=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/models/auto/tokenization_auto.py", line 1093, in from_pretrained
+    config = AutoConfig.from_pretrained(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/models/auto/configuration_auto.py", line 1332, in from_pretrained
+    config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/configuration_utils.py", line 662, in get_config_dict
+    config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/configuration_utils.py", line 721, in _get_config_dict
+    resolved_config_file = cached_file(
+                           ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/utils/hub.py", line 322, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/utils/hub.py", line 543, in cached_files
+    raise OSError(
+OSError: You are trying to access a gated repo.
+Make sure to have access to it at https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct.
+401 Client Error. (Request ID: Root=1-6a002568-2c2f67f95811be583a3bffc5;bf66ee44-72bd-498e-aba0-a0255d4a65d1)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct/resolve/main/config.json.
+Access to model meta-llama/Llama-3.1-8B-Instruct is restricted. You must have access to it and be authenticated to access it. Please log in.
+Traceback (most recent call last):
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 247, in <module>
+    main()
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 121, in main
+    sh(
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 28, in sh
+    subprocess.run(cmd, check=True, env=env)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/home/jovyan/posco-research/Legal_posco-3stages/.venv/bin/python3', '-u', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py', '--config', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/configs/pipeline_default.yaml', '--train-jsonl', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl', '--val-jsonl', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl', '--output-dir', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora', '--seed', '43']' returned non-zero exit status 1.
+
+$ /home/jovyan/posco-research/Legal_posco-3stages/.venv/bin/python3 -u /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py --config /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/configs/pipeline_default.yaml --train-jsonl /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl --val-jsonl /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl --output-dir /home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora --seed 43
+`torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:14<00:44, 14.79s/it]Fetching 4 files:  75%|███████▌  | 3/4 [00:17<00:04,  4.69s/it]Fetching 4 files: 100%|██████████| 4/4 [00:17<00:00,  4.27s/it]
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:00<00:01,  1.84it/s]Loading checkpoint shards:  50%|█████     | 2/4 [00:01<00:01,  1.80it/s]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:01<00:00,  1.81it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:01<00:00,  2.57it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:01<00:00,  2.23it/s]
+The model is already on multiple devices. Skipping the move to device specified in `args`.
+  0%|          | 0/1221 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py", line 268, in <module>
+    main()
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py", line 229, in main
+    train_out = trainer.train()
+                ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/trainer.py", line 2325, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/transformers/trainer.py", line 2715, in _inner_training_loop
+    _grad_norm = self.accelerator.clip_grad_norm_(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jovyan/posco-research/Legal_posco-3stages/.venv/lib/python3.12/site-packages/accelerate/accelerator.py", line 2994, in clip_grad_norm_
+    self.unscale_gradients()
+  File "/home/jovyan/posco-research/Legal_posco-3stages/.venv/lib/python3.12/site-packages/accelerate/accelerator.py", line 2932, in unscale_gradients
+    self.scaler.unscale_(opt)
+  File "/usr/local/lib/python3.12/dist-packages/torch/amp/grad_scaler.py", line 346, in unscale_
+    optimizer_state["found_inf_per_device"] = self._unscale_grads_(
+                                              ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/amp/grad_scaler.py", line 283, in _unscale_grads_
+    torch._amp_foreach_non_finite_check_and_unscale_(
+RuntimeError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'BFloat16'
+  0%|          | 0/1221 [00:02<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 247, in <module>
+    main()
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 121, in main
+    sh(
+  File "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/run_full_pipeline.py", line 28, in sh
+    subprocess.run(cmd, check=True, env=env)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/home/jovyan/posco-research/Legal_posco-3stages/.venv/bin/python3', '-u', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/stage1_sft/train.py', '--config', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/configs/pipeline_default.yaml', '--train-jsonl', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl', '--val-jsonl', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl', '--output-dir', '/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora', '--seed', '43']' returned non-zero exit status 1.

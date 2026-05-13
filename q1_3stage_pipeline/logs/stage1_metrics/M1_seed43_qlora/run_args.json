@@ -1,0 +1,10 @@
+{
+  "stage": "stage1_sft",
+  "train_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl",
+  "val_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl",
+  "output_dir": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora",
+  "metrics_dir": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/stage1_metrics/M1_seed43_qlora",
+  "seed": 43,
+  "full_finetune": true,
+  "use_lora": false
+}

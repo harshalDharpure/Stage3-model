@@ -4,7 +4,12 @@ __pycache__/
 *.py[cod]
 *.so
 
-# Large local artifacts
-q1_3stage_pipeline/logs/
+# Training corpus (large / regenerated separately)
 q1_3stage_pipeline/data/final_train_dialogues.jsonl
+
+# Under logs/: keep metrics, configs, text logs, tokenizer JSON, etc.
+# Exclude weight shards and optimizer/resume tensors (hundreds of GB).
+q1_3stage_pipeline/logs/**/*.safetensors
+q1_3stage_pipeline/logs/**/optimizer.pt
+q1_3stage_pipeline/logs/**/latest.pt
 

@@ -1,0 +1,23 @@
+{
+  "stage": "stage2_multi_objective",
+  "train_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/final_train_dialogues.jsonl",
+  "val_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl",
+  "output_dir": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage2/M2_fromM1_seed43_full_finaltrain",
+  "seed": 43,
+  "init_from": "m1",
+  "m1_path": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora/final",
+  "ablation": "full",
+  "lambda_entail": 0.5,
+  "lambda_triplet": 0.5,
+  "triplet_margin": 0.3,
+  "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+  "nli_teacher": "microsoft/deberta-large-mnli",
+  "eval_every": 200,
+  "resume": false,
+  "checkpoint_every": 10,
+  "entail_every": 2,
+  "entail_cache_size": 4096,
+  "fixed_eval_every": 200,
+  "lang_tag_prefix": "",
+  "debug_fast": false
+}
