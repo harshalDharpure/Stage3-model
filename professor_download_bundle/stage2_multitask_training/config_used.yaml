@@ -1,0 +1,44 @@
+# Default hyperparameters — tune on VALIDATION only; test is never touched during dev.
+
+project:
+  seed: 42
+  base_model: "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  # Optional: put a merged Exp3 HF checkpoint inside q1_3stage_pipeline/models/exp3_merged/
+  exp3_checkpoint: "q1_3stage_pipeline/models/exp3_merged"
+
+data:
+  # Dialogue-level split (NO pair files). These JSONLs contain `turns`.
+  # Training code flattens them into (input, output) examples in-memory.
+  train_path: "q1_3stage_pipeline/data/train_70_dialogues.jsonl"
+  val_path: "q1_3stage_pipeline/data/val_10_dialogues.jsonl"
+  test_path: "q1_3stage_pipeline/data/test_20_dialogues.jsonl"
+  # Optional (after tuning is frozen): merge train+val dialogues manually if desired.
+  final_train_path: "q1_3stage_pipeline/data/final_train_dialogues.jsonl"
+
+training:
+  max_length: 512
+  per_device_batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 5.0e-5
+  num_epochs: 3
+  warmup_ratio: 0.05
+  fp16: true
+  logging_steps: 50
+  save_steps: 500
+
+stage2:
+  lambda_entail: 0.5
+  lambda_triplet: 0.5
+  triplet_margin: 0.3
+  embedding_model: "sentence-transformers/all-mpnet-base-v2"
+  ablation: "full"  # gen_only | gen_entail | gen_triplet | full
+
+stage3_dpo:
+  beta_candidates: [0.1, 0.5, 1.0]
+  learning_rate: 5.0e-6
+  num_epochs: 1
+
+paths:
+  checkpoints_root: "q1_3stage_pipeline/logs/checkpoints"
+  logs_root: "q1_3stage_pipeline/logs"
+

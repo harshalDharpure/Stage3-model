@@ -1,0 +1,39 @@
+model,eval_note,metric_key,metric_label,value
+M1,preliminary_n4,n_examples,n_examples,4
+M1,preliminary_n4,bleu_1,BLEU-1,0.13229506807260888
+M1,preliminary_n4,bleu_2,BLEU-2,0.06424650223538035
+M1,preliminary_n4,bleu_3,BLEU-3,0.03343373495228904
+M1,preliminary_n4,bleu_4,BLEU-4,0.01960730029309889
+M1,preliminary_n4,rouge_1_f1,ROUGE-1 F1,0.28332607096313234
+M1,preliminary_n4,rouge_2_f1,ROUGE-2 F1,0.07721324075032215
+M1,preliminary_n4,rouge_l_f1,ROUGE-L F1,0.17987155842891137
+M1,preliminary_n4,meteor,METEOR,0.0
+M1,preliminary_n4,bertscore_f1,BERTScore F1,0.0
+M1,preliminary_n4,nli_score,NLI entailment score,0.6406506448984146
+M1,preliminary_n4,statute_precision,Statute precision,0.0
+M1,preliminary_n4,statute_recall,Statute recall,0.0
+M1,preliminary_n4,statute_f1,Statute F1,0.0
+M1,preliminary_n4,harmful_rate,Harmful rate,0.0
+M1,preliminary_n4,refusal_rate,Refusal rate,0.0
+M1,preliminary_n4,avg_reference_length,Avg reference tokens (chars proxy),87.0
+M1,preliminary_n4,avg_candidate_length,Avg candidate tokens (chars proxy),52.5
+M1,preliminary_n4,length_ratio,Length ratio (cand/ref),0.603448275862069
+M2,full_n950,n_examples,n_examples,950
+M2,full_n950,bleu_1,BLEU-1,0.14507845584359544
+M2,full_n950,bleu_2,BLEU-2,0.0617505741355866
+M2,full_n950,bleu_3,BLEU-3,0.03104701731185797
+M2,full_n950,bleu_4,BLEU-4,0.017314941482334593
+M2,full_n950,rouge_1_f1,ROUGE-1 F1,0.24143192558825244
+M2,full_n950,rouge_2_f1,ROUGE-2 F1,0.05533403759921315
+M2,full_n950,rouge_l_f1,ROUGE-L F1,0.15378628303987885
+M2,full_n950,meteor,METEOR,0.0
+M2,full_n950,bertscore_f1,BERTScore F1,0.0
+M2,full_n950,nli_score,NLI entailment score,0.4321617589166884
+M2,full_n950,statute_precision,Statute precision,0.5231228070175439
+M2,full_n950,statute_recall,Statute recall,0.3970138073141169
+M2,full_n950,statute_f1,Statute F1,0.4133888910585462
+M2,full_n950,harmful_rate,Harmful rate,0.005263157894736842
+M2,full_n950,refusal_rate,Refusal rate,0.0
+M2,full_n950,avg_reference_length,Avg reference tokens (chars proxy),89.7357894736842
+M2,full_n950,avg_candidate_length,Avg candidate tokens (chars proxy),53.397894736842105
+M2,full_n950,length_ratio,Length ratio (cand/ref),0.5950568335112435

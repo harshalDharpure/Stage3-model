@@ -1,0 +1,16 @@
+% Auto-generated from paper_results build. Copy into manuscript.
+% Requires: \usepackage{booktabs}
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccccccc}
+\toprule
+Model & $n$ & BLEU-4 & R-1 & R-2 & R-L & NLI & Stat.\ F1 \\
+\midrule
+M1 (SFT) & 4 & 0.020 & 0.283 & 0.077 & 0.180 & 0.641 & 0.000 \\
+M2 (multi-obj.) & 950 & 0.017 & 0.241 & 0.055 & 0.154 & 0.432 & 0.413 \\
+\bottomrule
+\end{tabular}
+\caption{Held-out test dialogue metrics (greedy decoding). \textbf{Note:} M1 row uses the current saved eval file with $n{=}4$; regenerate for comparable $n$.}
+\label{tab:test-metrics}
+\end{table}

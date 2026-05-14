@@ -1,0 +1,23 @@
+{
+  "base_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+  "seed": 43,
+  "run_name": "M1_seed43_qlora",
+  "train_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/train_70_dialogues.jsonl",
+  "val_jsonl": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/data/val_10_dialogues.jsonl",
+  "output_dir": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/checkpoints/stage1/M1_seed43_qlora",
+  "metrics_dir": "/home/jovyan/posco-research/Legal_posco-3stages/q1_3stage_pipeline/logs/stage1_metrics/M1_seed43_qlora",
+  "full_finetune": true,
+  "use_lora": false,
+  "train_runtime": 2133.22,
+  "train_samples": 840,
+  "val_samples": 120,
+  "final_metrics": {
+    "train_runtime": 2133.22,
+    "train_samples_per_second": 4.579,
+    "train_steps_per_second": 0.572,
+    "total_flos": 1.9837213522056806e+17,
+    "train_loss": 1.0167329369950353,
+    "epoch": 3.0
+  },
+  "val_perplexity": 5.353510856628418
+}

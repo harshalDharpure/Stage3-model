@@ -1,0 +1,3 @@
+Model,Note,n_examples,bleu_1,bleu_2,bleu_3,bleu_4,rouge_1_f1,rouge_2_f1,rouge_l_f1,meteor,bertscore_f1,nli_score,statute_precision,statute_recall,statute_f1,harmful_rate,refusal_rate,avg_reference_length,avg_candidate_length,length_ratio
+M1 (Stage 1 SFT),PRELIMINARY: only n=4 generations in saved eval JSON; rerun checkpoint_test_eval for full test set.,4,0.132295,0.064247,0.033434,0.019607,0.283326,0.077213,0.179872,0.000000,0.000000,0.640651,0.000000,0.000000,0.000000,0.000000,0.000000,87.000000,52.500000,0.603448
+M2 (Stage 2 multi-objective),Full flattened test set (n=950).,950,0.145078,0.061751,0.031047,0.017315,0.241432,0.055334,0.153786,0.000000,0.000000,0.432162,0.523123,0.397014,0.413389,0.005263,0.000000,89.735789,53.397895,0.595057

@@ -1,0 +1,13 @@
+Professor / advisor handoff — copied from Legal_posco-3stages (do not edit originals; this folder is a snapshot).
+
+Contents:
+  stage2_multitask_training/  — Stage 2 run config + full training log (losses, lambdas, etc.).
+  stage2_test_set_eval/     — Test-set metrics (.md + .json) and model predictions (.jsonl) + flat references.
+  stage1_for_context/       — Stage 1 SFT training summary + small M1 test-eval files for comparison.
+  pipeline_logs_stage2/     — Orchestrator logs around Stage 2 runs.
+
+Important limitations (read before presenting aggregate numbers):
+  • stage2_test_set_eval/ was refreshed after a full GPU eval: 950 flattened pairs (see stage2_m2_test_results.md). METEOR/BERTScore may be 0 if those resources were disabled or unavailable.
+  • Model weights (*.safetensors) are NOT included here (too large). Training completion is evidenced by your checkpoint tree on the training machine and by train_log.jsonl.
+
+Generated: see file mtimes. Path on server: professor_download_bundle/
